@@ -3,9 +3,6 @@ pipeline {
 
     environment {
         EXP_DIR = 'D:\\cloud-devops-assignment\\vle-pbl3\\exp7'
-        APP_DIR = 'D:\\cloud-devops-assignment\\vle-pbl3\\exp7\\app'
-        K8S_DIR = 'D:\\cloud-devops-assignment\\vle-pbl3\\exp7\\k8s'
-
         KUBECONFIG = 'D:\\cloud-devops-assignment\\vle-pbl3\\shared\\kube\\config'
 
         DOCKER_EXE = 'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe'
@@ -17,47 +14,44 @@ pipeline {
     }
 
     stages {
-        stage('Source Control') {
+        stage('Git Checkout') {
             steps {
-                echo 'Checking Git repository...'
-                bat '"%GIT_EXE%" -C "%EXP_DIR%" log -1 --oneline'
+                deleteDir()
+                echo 'Cloning application from local Git repository...'
+                bat '"%GIT_EXE%" clone --no-hardlinks "%EXP_DIR%" "%WORKSPACE%\\source"'
+                bat '"%GIT_EXE%" -C "%WORKSPACE%\\source" log -1 --oneline'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Docker Build') {
             steps {
                 echo 'Building Docker image...'
-                bat '"%DOCKER_EXE%" build -t "%IMAGE%" "%APP_DIR%"'
+                bat '"%DOCKER_EXE%" build -t "%IMAGE%" "%WORKSPACE%\\source\\app"'
             }
         }
 
-        stage('Load Image into kind') {
+        stage('Load Image into Kubernetes') {
             steps {
-                echo 'Loading image into Kubernetes cluster...'
+                echo 'Loading Docker image into kind...'
                 bat '"%KIND_EXE%" load docker-image "%IMAGE%" --name exp7-cluster'
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Kubernetes Deployment') {
             steps {
-                echo 'Applying Kubernetes manifests...'
-                bat '''
-                "%KUBECTL_EXE%" apply -f "%K8S_DIR%\\namespace.yaml"
-                "%KUBECTL_EXE%" apply -f "%K8S_DIR%\\deployment.yaml"
-                "%KUBECTL_EXE%" apply -f "%K8S_DIR%\\service.yaml"
-                '''
+                echo 'Creating namespace...'
+                bat '"%KUBECTL_EXE%" apply -f "%WORKSPACE%\\source\\k8s\\namespace.yaml"'
+
+                echo 'Deploying application...'
+                bat '"%KUBECTL_EXE%" apply -f "%WORKSPACE%\\source\\k8s\\deployment.yaml"'
+                bat '"%KUBECTL_EXE%" apply -f "%WORKSPACE%\\source\\k8s\\service.yaml"'
             }
         }
 
         stage('Verify Deployment') {
             steps {
-                echo 'Waiting for Kubernetes rollout...'
                 bat '"%KUBECTL_EXE%" rollout status deployment/exp7-dashboard -n exp7 --timeout=120s'
-
-                echo 'Checking running pods...'
                 bat '"%KUBECTL_EXE%" get pods -n exp7 -o wide'
-
-                echo 'Checking Kubernetes service...'
                 bat '"%KUBECTL_EXE%" get svc -n exp7'
             }
         }
