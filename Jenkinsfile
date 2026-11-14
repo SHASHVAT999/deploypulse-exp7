@@ -1,8 +1,11 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)
+    }
+
     environment {
-        EXP_DIR = 'D:\\cloud-devops-assignment\\vle-pbl3\\exp7'
         KUBECONFIG = 'D:\\cloud-devops-assignment\\vle-pbl3\\shared\\kube\\config'
 
         DOCKER_EXE = 'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe'
@@ -17,34 +20,30 @@ pipeline {
         stage('Git Checkout') {
             steps {
                 deleteDir()
-                echo 'Cloning application from local Git repository...'
-                bat '"%GIT_EXE%" clone --no-hardlinks "%EXP_DIR%" "%WORKSPACE%\\source"'
-                bat '"%GIT_EXE%" -C "%WORKSPACE%\\source" log -1 --oneline'
+                checkout scm
+                bat '"%GIT_EXE%" rev-parse --short HEAD'
             }
         }
 
         stage('Docker Build') {
             steps {
                 echo 'Building Docker image...'
-                bat '"%DOCKER_EXE%" build -t "%IMAGE%" "%WORKSPACE%\\source\\app"'
+                bat '"%DOCKER_EXE%" build -t "%IMAGE%" "%WORKSPACE%\\app"'
             }
         }
 
         stage('Load Image into Kubernetes') {
             steps {
-                echo 'Loading Docker image into kind...'
+                echo 'Loading image into kind cluster...'
                 bat '"%KIND_EXE%" load docker-image "%IMAGE%" --name exp7-cluster'
             }
         }
 
         stage('Kubernetes Deployment') {
             steps {
-                echo 'Creating namespace...'
-                bat '"%KUBECTL_EXE%" apply -f "%WORKSPACE%\\source\\k8s\\namespace.yaml"'
-
-                echo 'Deploying application...'
-                bat '"%KUBECTL_EXE%" apply -f "%WORKSPACE%\\source\\k8s\\deployment.yaml"'
-                bat '"%KUBECTL_EXE%" apply -f "%WORKSPACE%\\source\\k8s\\service.yaml"'
+                bat '"%KUBECTL_EXE%" apply -f "%WORKSPACE%\\k8s\\namespace.yaml"'
+                bat '"%KUBECTL_EXE%" apply -f "%WORKSPACE%\\k8s\\deployment.yaml"'
+                bat '"%KUBECTL_EXE%" apply -f "%WORKSPACE%\\k8s\\service.yaml"'
             }
         }
 
